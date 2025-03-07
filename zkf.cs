@@ -79,6 +79,13 @@ namespace Fingers
             }
             //将imgbuffer中的内容保存在bitmap中
             Bitmap bitmap = new Bitmap(imageWidth, imageHeight, PixelFormat.Format8bppIndexed);
+            //设置灰度调色板
+            ColorPalette palette = bitmap.Palette;
+            for (int i = 0; i < 256; i++)
+            {
+                palette.Entries[i] = Color.FromArgb(i, i, i); // 每个索引对应灰度值
+            }
+            bitmap.Palette = palette;
             BitmapData bitmapData = bitmap.LockBits(
                     new Rectangle(0, 0, imageWidth, imageHeight),
                     ImageLockMode.WriteOnly,

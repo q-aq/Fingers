@@ -15,6 +15,7 @@ namespace Fingers
     public partial class MainForm : Form
     {
         public zkf finger;
+        public Sql db;
         public static bool alive = false;
         public MainForm()
         {
@@ -27,8 +28,8 @@ namespace Fingers
             this.ButtonGather.Enabled = false;
             this.ButtonStop.Enabled = false;
             finger = new zkf();
+            db = new Sql();
         }
-        // TODO:可以读取图片，但是会卡死，不显示图片
         private void RefreshImage()//刷新图片
         {
             while (MainForm.alive)
@@ -70,8 +71,11 @@ namespace Fingers
 
         private void ButtonLogout_Click(object sender, EventArgs e)//退出按钮
         {
-            MainForm.alive = false;
-            finger.StopCapture();//停止读取指纹
+            if (MainForm.alive)
+            {
+                MainForm.alive = false;
+                finger.StopCapture();//停止读取指纹
+            }
             this.Close();
         }
 
@@ -94,6 +98,79 @@ namespace Fingers
                     Thread captureThread = new Thread(RefreshImage);
                     captureThread.Start();
                 }
+            }
+            // TODO: 测试用
+            this.ButtonFirst.Enabled = true;
+            this.ButtonGather.Enabled=true;
+        }
+
+        private void ButtonGather_Click(object sender, EventArgs e)//采集
+        {
+            if (pictureBox1.Image == null)
+            {
+                MessageBox.Show("未加载图片");
+                return;
+            }
+            string username = textBox1.Text;
+            if(string.IsNullOrEmpty(username))
+            {
+                MessageBox.Show("姓名不能为空");
+                return;
+            }
+            SaveFileDialog saveFile = new SaveFileDialog();
+            saveFile.Title = "保存文件";
+            saveFile.InitialDirectory = Application.StartupPath;
+            saveFile.Filter = "所有文件 (*.*)|*.*";
+            saveFile.DefaultExt = "bmp";
+            saveFile.AddExtension = true;
+            if(saveFile.ShowDialog() == DialogResult.OK)
+            {
+                string filePath = saveFile.FileName;
+                Bitmap bitmap = new Bitmap(pictureBox1.Image);
+                ImageHelper.SaveBitmapToFile(bitmap, filePath,ImageFormat.Bmp);
+                //上传指纹库
+                string sql = $"insert into fingerprints(username,image_path) values(\"{username}\", \"{filePath.Replace("\\", "\\\\")}\")";  
+                object index = db.Exec(sql);
+                if(index is int number)
+                {
+                    Console.WriteLine(number.ToString());
+                }
+            }
+        }
+        private void ButtonFirst_Click(object sender, EventArgs e)//载入图像
+        {
+            OpenFileDialog openFile = new OpenFileDialog();
+            openFile.Title = "打开文件";
+            openFile.InitialDirectory = Application.StartupPath;
+            openFile.Filter = "所有文件 (*.*)|*.*";
+            openFile.DefaultExt = "bmp";
+            openFile.AddExtension = true;
+            if(openFile.ShowDialog() == DialogResult.OK)
+            {
+                string filePath = openFile.FileName;
+                Bitmap bmp = ImageHelper.LoadBitmapFromFile(filePath);
+                if (this.pictureBox1.Image != null)//将图片发送到pictureBox中
+                    pictureBox1.Image.Dispose();
+                pictureBox1.Image = bmp;
+            }
+        }
+
+        private void MainForm_FormClosing(object sender, FormClosingEventArgs e)//窗口关闭前关闭监听循环
+        {
+            if (MainForm.alive)
+            {
+                MainForm.alive = false;
+                finger.StopCapture();//停止读取指纹
+            }
+            e.Cancel = false;
+        }
+
+        private void ButtonData_Click(object sender, EventArgs e)
+        {
+            if(db.Login())
+            {
+                Form da = new FingerData(db);
+                da.Show();
             }
         }
     }

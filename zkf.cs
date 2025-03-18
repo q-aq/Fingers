@@ -6,7 +6,6 @@ using System.Windows.Forms;
 using libzkfpcsharp;
 using System.Threading;
 using System.IO;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace Fingers
 {
@@ -105,10 +104,10 @@ namespace Fingers
         }
     }
 
-    public static class ImageHelper
+    public static class ImageHelper//图片类
     {
         private static Random random = new Random();//随机数产生器
-        public static string CreateFileName(string fileName)
+        public static string CreateFileName(string fileName)//随机产生文件名
         {
             if (string.IsNullOrEmpty(fileName))
                 throw new ArgumentException("文件名不能为空", nameof(fileName));
@@ -122,7 +121,7 @@ namespace Fingers
             string NewPath = Path.Combine(directory, NewName);//生成文件路径
             return CreateFileName(NewPath);//递归检查该文件路径是否存在
         }
-        public static string SaveBitmapToFile(Bitmap bitmap, string filePath , ImageFormat format)
+        public static string SaveBitmapToFile(Bitmap bitmap, string filePath , ImageFormat format)//保存文件
         {
             if (bitmap == null)
                 throw new ArgumentNullException(nameof(bitmap));
@@ -145,12 +144,48 @@ namespace Fingers
             {
                 throw new UnauthorizedAccessException("没有写入权限", ex);
             }
-            finally
-            {
-                // 释放资源（虽然 Bitmap 会被垃圾回收，但显式释放更安全）
-                bitmap.Dispose();
-            }
             return filePath;
+        }
+        public static Bitmap LoadBitmapFromFile(string filePath)//加载图片
+        {
+            if (string.IsNullOrEmpty(filePath))
+            {
+                throw new ArgumentException("文件路径不能为空", nameof(filePath));
+            }
+            if (!File.Exists(filePath))
+            {
+                throw new FileNotFoundException("指定的文件不存在", filePath);
+            }
+            string fileExtension = Path.GetExtension(filePath).ToLower();
+            if (fileExtension != ".bmp")
+            {
+                throw new ArgumentException("文件扩展名不是BMP", nameof(filePath));
+            }
+            try
+            {
+                Bitmap bitmap = new Bitmap(filePath);
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"加载图像时出错: {ex.Message}");
+                return null;
+            }
+        }
+        public static void ReadImgInformation(Bitmap img)//读取图片参数
+        {
+
+        }
+    }
+    public static class FileHelper//文件操作类
+    {
+        public static void ReadFile(string filepath)//读文件
+        {
+
+        }
+        public static void WriteFile(string filepath)//写文件
+        {
+
         }
     }
 }

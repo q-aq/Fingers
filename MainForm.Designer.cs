@@ -98,6 +98,7 @@
             this.ButtonGather.TabIndex = 2;
             this.ButtonGather.Text = "采集";
             this.ButtonGather.UseVisualStyleBackColor = true;
+            this.ButtonGather.Click += new System.EventHandler(this.ButtonGather_Click);
             // 
             // ButtonIdentify
             // 
@@ -292,6 +293,7 @@
             this.ButtonFirst.TabIndex = 3;
             this.ButtonFirst.Text = "1.载入图像";
             this.ButtonFirst.UseVisualStyleBackColor = true;
+            this.ButtonFirst.Click += new System.EventHandler(this.ButtonFirst_Click);
             // 
             // groupBox2
             // 
@@ -362,6 +364,7 @@
             this.ButtonData.TabStop = false;
             this.ButtonData.Text = "指纹库信息";
             this.ButtonData.UseVisualStyleBackColor = true;
+            this.ButtonData.Click += new System.EventHandler(this.ButtonData_Click);
             // 
             // pictureBox2
             // 
@@ -389,7 +392,7 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(12F, 24F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.AutoSize = true;
-            this.ClientSize = new System.Drawing.Size(1888, 979);
+            this.ClientSize = new System.Drawing.Size(1884, 975);
             this.Controls.Add(this.groupBox5);
             this.Controls.Add(this.ButtonData);
             this.Controls.Add(this.groupBox4);
@@ -403,6 +406,7 @@
             this.MinimumSize = new System.Drawing.Size(1914, 1050);
             this.Name = "MainForm";
             this.Text = "Form1";
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
             this.groupBox1.ResumeLayout(false);
             this.groupBox2.ResumeLayout(false);

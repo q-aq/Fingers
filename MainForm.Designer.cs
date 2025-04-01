@@ -57,6 +57,7 @@
             this.ButtonData = new System.Windows.Forms.Button();
             this.pictureBox2 = new System.Windows.Forms.PictureBox();
             this.groupBox5 = new System.Windows.Forms.GroupBox();
+            this.textBox2 = new System.Windows.Forms.TextBox();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
@@ -173,6 +174,7 @@
             this.ButtonThirteen.TabIndex = 15;
             this.ButtonThirteen.Text = "13.特征匹配";
             this.ButtonThirteen.UseVisualStyleBackColor = true;
+            this.ButtonThirteen.Click += new System.EventHandler(this.ButtonThirteen_Click);
             // 
             // ButtonTwelve
             // 
@@ -183,6 +185,7 @@
             this.ButtonTwelve.TabIndex = 14;
             this.ButtonTwelve.Text = "12.特征入库";
             this.ButtonTwelve.UseVisualStyleBackColor = true;
+            this.ButtonTwelve.Click += new System.EventHandler(this.ButtonTwelve_Click);
             // 
             // ButtonEleven
             // 
@@ -193,6 +196,7 @@
             this.ButtonEleven.TabIndex = 13;
             this.ButtonEleven.Text = "11.特征过滤";
             this.ButtonEleven.UseVisualStyleBackColor = true;
+            this.ButtonEleven.Click += new System.EventHandler(this.ButtonEleven_Click);
             // 
             // ButtonTen
             // 
@@ -203,6 +207,7 @@
             this.ButtonTen.TabIndex = 12;
             this.ButtonTen.Text = "10.特征提取";
             this.ButtonTen.UseVisualStyleBackColor = true;
+            this.ButtonTen.Click += new System.EventHandler(this.ButtonTen_Click);
             // 
             // ButtonNine
             // 
@@ -213,6 +218,7 @@
             this.ButtonNine.TabIndex = 11;
             this.ButtonNine.Text = "9.细化";
             this.ButtonNine.UseVisualStyleBackColor = true;
+            this.ButtonNine.Click += new System.EventHandler(this.ButtonNine_Click);
             // 
             // ButtonEight
             // 
@@ -223,6 +229,7 @@
             this.ButtonEight.TabIndex = 10;
             this.ButtonEight.Text = "8.二值化";
             this.ButtonEight.UseVisualStyleBackColor = true;
+            this.ButtonEight.Click += new System.EventHandler(this.ButtonEight_Click);
             // 
             // ButtonSeven
             // 
@@ -233,6 +240,7 @@
             this.ButtonSeven.TabIndex = 9;
             this.ButtonSeven.Text = "7.Gabor增强";
             this.ButtonSeven.UseVisualStyleBackColor = true;
+            this.ButtonSeven.Click += new System.EventHandler(this.ButtonSeven_Click);
             // 
             // ButtonSix
             // 
@@ -243,6 +251,7 @@
             this.ButtonSix.TabIndex = 8;
             this.ButtonSix.Text = "6.掩码计算";
             this.ButtonSix.UseVisualStyleBackColor = true;
+            this.ButtonSix.Click += new System.EventHandler(this.ButtonSix_Click);
             // 
             // ButtonFive
             // 
@@ -253,6 +262,7 @@
             this.ButtonFive.TabIndex = 7;
             this.ButtonFive.Text = "5.频率计算";
             this.ButtonFive.UseVisualStyleBackColor = true;
+            this.ButtonFive.Click += new System.EventHandler(this.ButtonFive_Click);
             // 
             // ButtonFour
             // 
@@ -263,6 +273,7 @@
             this.ButtonFour.TabIndex = 6;
             this.ButtonFour.Text = "4.方向计算";
             this.ButtonFour.UseVisualStyleBackColor = true;
+            this.ButtonFour.Click += new System.EventHandler(this.ButtonFour_Click);
             // 
             // ButtonThird
             // 
@@ -273,6 +284,7 @@
             this.ButtonThird.TabIndex = 5;
             this.ButtonThird.Text = "3.均衡化";
             this.ButtonThird.UseVisualStyleBackColor = true;
+            this.ButtonThird.Click += new System.EventHandler(this.ButtonThird_Click);
             // 
             // ButtonSecond
             // 
@@ -283,6 +295,7 @@
             this.ButtonSecond.TabIndex = 4;
             this.ButtonSecond.Text = "2.中值滤波";
             this.ButtonSecond.UseVisualStyleBackColor = true;
+            this.ButtonSecond.Click += new System.EventHandler(this.ButtonSecond_Click);
             // 
             // ButtonFirst
             // 
@@ -378,6 +391,7 @@
             // 
             // groupBox5
             // 
+            this.groupBox5.Controls.Add(this.textBox2);
             this.groupBox5.Controls.Add(this.pictureBox2);
             this.groupBox5.Controls.Add(this.pictureBox1);
             this.groupBox5.Location = new System.Drawing.Point(268, 12);
@@ -386,6 +400,17 @@
             this.groupBox5.TabIndex = 15;
             this.groupBox5.TabStop = false;
             this.groupBox5.Text = "指纹区";
+            // 
+            // textBox2
+            // 
+            this.textBox2.BackColor = System.Drawing.SystemColors.ControlLight;
+            this.textBox2.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.textBox2.Font = new System.Drawing.Font("宋体", 13.875F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.textBox2.Location = new System.Drawing.Point(7, 41);
+            this.textBox2.Name = "textBox2";
+            this.textBox2.ReadOnly = true;
+            this.textBox2.Size = new System.Drawing.Size(1335, 50);
+            this.textBox2.TabIndex = 15;
             // 
             // MainForm
             // 
@@ -415,6 +440,7 @@
             this.groupBox4.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox2)).EndInit();
             this.groupBox5.ResumeLayout(false);
+            this.groupBox5.PerformLayout();
             this.ResumeLayout(false);
 
         }
@@ -450,6 +476,7 @@
         private System.Windows.Forms.Button ButtonData;
         private System.Windows.Forms.PictureBox pictureBox2;
         private System.Windows.Forms.GroupBox groupBox5;
+        private System.Windows.Forms.TextBox textBox2;
     }
 }
 

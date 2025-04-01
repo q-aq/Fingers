@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Google.Protobuf.WellKnownTypes;
+using System;
+using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -17,19 +19,36 @@ namespace Fingers
         public zkf finger;
         public Sql db;
         public static bool alive = false;
+        public Bitmap CurrentImage = null;//当前处理的图片
         public MainForm()
         {
             InitializeComponent();
             this.ButtonLogout.TabStop = false;
             this.ButtonStart.TabIndex = 0;
             this.ButtonStart.TabStop = true;
-            ControlButton(groupBox1);
+            //ControlButton(groupBox1);
             ControlButton(groupBox3);
             this.ButtonGather.Enabled = false;
             this.ButtonStop.Enabled = false;
             finger = new zkf();
             db = new Sql();
         }
+
+        public void SaveMinutiae(Bitmap bmp)//特征入库
+        {
+            // TODO: 将最后处理得到的特征图存入数据库中，需要重写数据库
+        }
+
+        public void BuildNabors()//获取特征点相邻关系
+        {
+
+        }
+
+        public double MinuSimilarity()//获取特征匹配相似度
+        {
+            return 0.0;
+        }
+
         private void RefreshImage()//刷新图片
         {
             while (MainForm.alive)
@@ -41,7 +60,11 @@ namespace Fingers
                     {
                         if (this.pictureBox1.Image != null)//将图片发送到pictureBox中
                             pictureBox1.Image.Dispose();
-                        pictureBox1.Image = image;
+                        pictureBox1.Image = (Bitmap)image.Clone();
+                        if(CurrentImage != null) CurrentImage.Dispose();
+                        CurrentImage = image;
+                        List<int> temp = Analysis.GetBitmapInfo(image);
+                        textBox2.Text = $"宽度[{temp[0]}],高度[{temp[1]}],深度[{temp[2]}]";
                     }));
                 }
                 else
@@ -50,7 +73,6 @@ namespace Fingers
                 }
             }
         }
-
 
         private void ControlButton(Control container,bool temp = false)
         {
@@ -126,8 +148,7 @@ namespace Fingers
             if(saveFile.ShowDialog() == DialogResult.OK)
             {
                 string filePath = saveFile.FileName;
-                Bitmap bitmap = new Bitmap(pictureBox1.Image);
-                ImageHelper.SaveBitmapToFile(bitmap, filePath,ImageFormat.Bmp);
+                ImageHelper.SaveBitmapToFile(CurrentImage, filePath,ImageFormat.Bmp);
                 //上传指纹库
                 string sql = $"insert into fingerprints(username,image_path) values(\"{username}\", \"{filePath.Replace("\\", "\\\\")}\")";  
                 object index = db.Exec(sql);
@@ -151,7 +172,13 @@ namespace Fingers
                 Bitmap bmp = ImageHelper.LoadBitmapFromFile(filePath);
                 if (this.pictureBox1.Image != null)//将图片发送到pictureBox中
                     pictureBox1.Image.Dispose();
-                pictureBox1.Image = bmp;
+                pictureBox1.Image = (Bitmap)bmp.Clone();
+                if (CurrentImage != null) CurrentImage.Dispose();
+                CurrentImage = bmp;
+                List<int> temp = Analysis.GetBitmapInfo(bmp);
+                string[] l;
+                l = filePath.Split('\\');
+                textBox2.Text = $"源图[{l[l.Length-1]}],宽度[{temp[0]}],高度[{temp[1]}],深度[{temp[2]}]";
             }
         }
 
@@ -172,6 +199,108 @@ namespace Fingers
                 Form da = new FingerData(db);
                 da.Show();
             }
+        }
+        // TODO: 需要解决中间图片输出又变为32位深度的问题
+        private void ButtonSecond_Click(object sender, EventArgs e)//中值滤波
+        {
+            if(pictureBox1.Image == null)
+            {
+                MessageBox.Show("请载入图像");
+                return;
+            }
+            Bitmap res = Analysis.MidFilter(CurrentImage);
+            if (pictureBox2.Image != null)
+                pictureBox2.Image.Dispose();
+            pictureBox2.Image = (Bitmap)CurrentImage.Clone();
+            if (pictureBox1.Image != null)
+                pictureBox1.Image.Dispose();
+            pictureBox1.Image = (Bitmap)res.Clone();
+            if (CurrentImage != null) CurrentImage.Dispose();
+            CurrentImage = res;
+            ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step2.bmp",ImageFormat.Bmp);
+        }
+
+        private void ButtonThird_Click(object sender, EventArgs e)//均衡化
+        {
+            if (pictureBox1.Image == null)
+            {
+                MessageBox.Show("请载入图像");
+                return;
+            }
+            Bitmap res = Analysis.HistoNormalize(CurrentImage);
+            if (pictureBox2.Image != null)
+                pictureBox2.Image.Dispose();
+            pictureBox2.Image = (Bitmap)CurrentImage.Clone();
+            if (pictureBox1.Image != null)
+                pictureBox1.Image.Dispose();
+            pictureBox1.Image = (Bitmap)res.Clone();
+            if (CurrentImage != null) CurrentImage.Dispose();
+            CurrentImage = res;
+            ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step3.bmp",ImageFormat.Bmp);
+        }
+
+        private void ButtonFour_Click(object sender, EventArgs e)//方向计算
+        {
+            if (pictureBox1.Image == null)
+            {
+                MessageBox.Show("请载入图像");
+                return;
+            }
+            Bitmap res = Analysis.ImgDirection(CurrentImage);
+            if (pictureBox2.Image != null)
+                pictureBox2.Image.Dispose();
+            pictureBox2.Image = (Bitmap)CurrentImage.Clone();
+            if (pictureBox1.Image != null)
+                pictureBox1.Image.Dispose();
+            pictureBox1.Image = (Bitmap)res.Clone();
+            if (CurrentImage != null) CurrentImage.Dispose();
+            CurrentImage = res;
+            ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step4.bmp", ImageFormat.Bmp);
+        }
+
+        private void ButtonFive_Click(object sender, EventArgs e)//频率计算
+        {
+
+        }
+
+        private void ButtonSix_Click(object sender, EventArgs e)//掩码计算
+        {
+
+        }
+
+        private void ButtonSeven_Click(object sender, EventArgs e)//Gabor增强
+        {
+
+        }
+
+        private void ButtonEight_Click(object sender, EventArgs e)//二值化
+        {
+
+        }
+
+        private void ButtonNine_Click(object sender, EventArgs e)//细化
+        {
+
+        }
+
+        private void ButtonTen_Click(object sender, EventArgs e)//特征提取
+        {
+
+        }
+
+        private void ButtonEleven_Click(object sender, EventArgs e)//特征过滤
+        {
+
+        }
+
+        private void ButtonTwelve_Click(object sender, EventArgs e)//特征入库
+        {
+
+        }
+
+        private void ButtonThirteen_Click(object sender, EventArgs e)//特征匹配
+        {
+
         }
     }
 }

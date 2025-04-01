@@ -6,6 +6,7 @@ using System.Windows.Forms;
 using libzkfpcsharp;
 using System.Threading;
 using System.IO;
+using Org.BouncyCastle.Crypto;
 
 namespace Fingers
 {
@@ -168,13 +169,9 @@ namespace Fingers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"加载图像时出错: {ex.Message}");
+                MessageBox.Show($"加载图像时出错: {ex.Message}");
                 return null;
             }
-        }
-        public static void ReadImgInformation(Bitmap img)//读取图片参数
-        {
-
         }
     }
     public static class FileHelper//文件操作类

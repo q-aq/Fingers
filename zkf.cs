@@ -147,6 +147,7 @@ namespace Fingers
             }
             return filePath;
         }
+
         public static Bitmap LoadBitmapFromFile(string filePath)//加载图片
         {
             if (string.IsNullOrEmpty(filePath))

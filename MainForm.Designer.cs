@@ -110,6 +110,7 @@
             this.ButtonIdentify.TabIndex = 3;
             this.ButtonIdentify.Text = "识别";
             this.ButtonIdentify.UseVisualStyleBackColor = true;
+            this.ButtonIdentify.Click += new System.EventHandler(this.ButtonIdentify_Click);
             // 
             // ButtonRegistration
             // 
@@ -120,6 +121,7 @@
             this.ButtonRegistration.TabIndex = 4;
             this.ButtonRegistration.Text = "登记";
             this.ButtonRegistration.UseVisualStyleBackColor = true;
+            this.ButtonRegistration.Click += new System.EventHandler(this.ButtonRegistration_Click);
             // 
             // ButtonStop
             // 

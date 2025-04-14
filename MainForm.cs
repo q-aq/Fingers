@@ -12,6 +12,8 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using static Fingers.Analysis;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.StartPanel;
 
 namespace Fingers
 {
@@ -27,6 +29,10 @@ namespace Fingers
         public byte[] MaskData;//掩码计算结果数据
         public byte[] GaborData;//Gabor滤波结果数据
         public byte[] BinData;//二值化结果数据
+        public byte[] ThinnedData;//细化结果数据
+        public byte[] ExtractData;//特征提取数据
+        public int Extrcount = 0;//特征提取返回的count
+        MINUTIAE[] Minutiaes;//特征点
         public MainForm()
         {
             InitializeComponent();
@@ -40,6 +46,7 @@ namespace Fingers
             finger = new zkf();
             db = new Sql();
         }
+
 
         public static int DeleteAllFiles(string folderPath, bool recursive = false, bool ignoreErrors = true)
         {
@@ -82,9 +89,20 @@ namespace Fingers
             }
         }
 
-        public void SaveMinutiae(Bitmap bmp)//特征入库
+        public Bitmap SaveMinutiae(Bitmap input, out MINUTIAE[] minutiaes)//获取特征图
         {
-            // TODO: 将最后处理得到的特征图存入数据库中，需要重写数据库
+            Bitmap step1 = Analysis.MidFilter(input);//中值滤波
+            Bitmap step2 = Analysis.HistoNormalize(step1);//均衡化
+            Analysis.ImgDirection(step2, out DicData);//方向计算
+            Analysis.Frequency(step2, DicData, out FreData);//频率计算
+            Analysis.GetMask(step2, DicData, FreData, out MaskData);//掩码计算
+            Analysis.GaborEnhance(step2, DicData, FreData, MaskData, out GaborData);//Gabor增强
+            Analysis.BinaryImg(step2, out BinData);//二值化
+            Analysis.Thinning(step2, BinData, out ThinnedData, Extrcount);//细化
+            Analysis.Extract(step2, ThinnedData, out ExtractData, out Extrcount);//特征提取
+            Bitmap output = Analysis.MinuFilter(step2, ThinnedData, ExtractData, out Minutiaes, ref Extrcount);//特征过滤
+            minutiaes = Minutiaes;
+            return output;
         }
 
         public void BuildNabors()//获取特征点相邻关系
@@ -181,12 +199,6 @@ namespace Fingers
                 MessageBox.Show("未加载图片");
                 return;
             }
-            string username = textBox1.Text;
-            if(string.IsNullOrEmpty(username))
-            {
-                MessageBox.Show("姓名不能为空");
-                return;
-            }
             SaveFileDialog saveFile = new SaveFileDialog();
             saveFile.Title = "保存文件";
             saveFile.InitialDirectory = Application.StartupPath;
@@ -197,13 +209,6 @@ namespace Fingers
             {
                 string filePath = saveFile.FileName;
                 ImageHelper.SaveBitmapToFile(CurrentImage, filePath,ImageFormat.Bmp);
-                //上传指纹库
-                string sql = $"insert into fingerprints(username,image_path) values(\"{username}\", \"{filePath.Replace("\\", "\\\\")}\")";  
-                object index = db.Exec(sql);
-                if(index is int number)
-                {
-                    Console.WriteLine(number.ToString());
-                }
             }
         }
         private void ButtonFirst_Click(object sender, EventArgs e)//载入图像
@@ -219,6 +224,7 @@ namespace Fingers
             {
                 string filePath = openFile.FileName;
                 Bitmap bmp = ImageHelper.LoadBitmapFromFile(filePath);
+                if (bmp is null) return;
                 if (this.pictureBox1.Image != null)//将图片发送到pictureBox中
                     pictureBox1.Image.Dispose();
                 pictureBox1.Image = (Bitmap)bmp.Clone();
@@ -254,7 +260,6 @@ namespace Fingers
                 da.Show();
             }
         }
-        // TODO: 需要解决中间图片输出又变为32位深度的问题
 
         public void Update(Bitmap res)
         {
@@ -354,17 +359,38 @@ namespace Fingers
 
         private void ButtonNine_Click(object sender, EventArgs e)//细化
         {
-
+            if (pictureBox1.Image == null || temps is null)
+            {
+                MessageBox.Show("请载入图像");
+                return;
+            }
+            Bitmap res = Analysis.Thinning(temps, BinData, out ThinnedData, 3);
+            Update(res);
+            ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step9.bmp", ImageFormat.Bmp);
         }
 
         private void ButtonTen_Click(object sender, EventArgs e)//特征提取
         {
-
+            if (pictureBox1.Image == null || temps is null)
+            {
+                MessageBox.Show("请载入图像");
+                return;
+            }
+            Bitmap res = Analysis.Extract(temps, ThinnedData, out ExtractData, out Extrcount);
+            Update(res);
+            ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step10.bmp", ImageFormat.Bmp);
         }
 
         private void ButtonEleven_Click(object sender, EventArgs e)//特征过滤
         {
-
+            if (pictureBox1.Image == null || temps is null)
+            {
+                MessageBox.Show("请载入图像");
+                return;
+            }
+            Bitmap res = Analysis.MinuFilter(temps, ThinnedData, ExtractData, out Minutiaes, ref Extrcount);
+            Update(res);
+            ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step11.bmp", ImageFormat.Bmp);
         }
 
         private void ButtonTwelve_Click(object sender, EventArgs e)//特征入库
@@ -375,6 +401,77 @@ namespace Fingers
         private void ButtonThirteen_Click(object sender, EventArgs e)//特征匹配
         {
 
+        }
+
+        /// <summary>
+        /// 将指纹图片和特征图发送到数据库记录
+        /// </summary>
+        private void ButtonRegistration_Click(object sender, EventArgs e)//登记
+        {
+            if (pictureBox1.Image == null)
+            {
+                MessageBox.Show("未加载图片");
+                return;
+            }
+            string username = textBox1.Text;
+            if(string.IsNullOrWhiteSpace(username))
+            {
+                MessageBox.Show("请输入用户名");
+                return;
+            }
+            SaveFileDialog saveFile = new SaveFileDialog();
+            saveFile.Title = "保存文件";
+            saveFile.InitialDirectory = Application.StartupPath;
+            saveFile.Filter = "所有文件 (*.*)|*.*";
+            saveFile.DefaultExt = "bmp";
+            saveFile.AddExtension = true;
+            if (saveFile.ShowDialog() == DialogResult.OK)
+            {
+                string filePath = saveFile.FileName;
+                ImageHelper.SaveBitmapToFile(CurrentImage, filePath, ImageFormat.Bmp);
+                filePath = filePath.Replace("\\","\\\\");
+                string sql = $"insert into fingerprints(username, image_path) values(\"{username}\",\"{filePath}\")";
+                object index = db.Exec(sql);
+                if(index is null)
+                {
+                    MessageBox.Show("错误");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 遍历数据库找到对应的记录
+        /// </summary>
+        private void ButtonIdentify_Click(object sender, EventArgs e)//识别
+        {
+            MINUTIAE[] minutiaes1;
+            Bitmap res = SaveMinutiae(CurrentImage, out minutiaes1);
+            if (pictureBox1.Image != null)
+                pictureBox1.Image.Dispose();
+            pictureBox1.Image = (Bitmap)res.Clone();
+            //遍历数据库
+            string sql = "select username, image_path from fingerprints";
+            object data = db.Exec(sql);
+            if(data is DataTable dt && dt.Rows.Count > 0)
+            {
+                foreach (DataRow dr in dt.Rows)
+                {
+                    string username = dr[0].ToString();
+                    string filepath = dr[1].ToString();
+                    Bitmap temp = ImageHelper.LoadBitmapFromFile(filepath);
+                    MINUTIAE[] minutiaes2;
+                    Bitmap res2 = SaveMinutiae(CurrentImage, out minutiaes2);
+                    if (pictureBox2.Image != null)
+                        pictureBox2.Image.Dispose();
+                    pictureBox2.Image = (Bitmap)res2.Clone();
+                    if (Analysis.CompareMinutiaeArrays(minutiaes1, minutiaes2))
+                    {
+                        MessageBox.Show($"识别成功:{username}");
+                        return;
+                    }
+                }
+                MessageBox.Show("未匹配到正确结果");
+            }
         }
     }
 }

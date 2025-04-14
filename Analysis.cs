@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Org.BouncyCastle.Utilities;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -16,6 +17,30 @@ namespace Fingers
 {
     public class Analysis//指纹分析类
     {
+
+        [Serializable]
+        public struct NEIGHBOUR
+        {
+            public int x;
+            public int y;//横纵坐标
+            public int type;//特征点类型（1：端点；3：分叉点）
+            public float Theta;//两点连线角度（弧度）
+            public float Theta2Ridge;//两点脊线方向夹角（弧度）
+            public float ThetaThisNibor;//相邻特征点的脊线方向（弧度）
+            public int distance;//两点距离（像素数量）
+
+        };
+
+        [Serializable]
+        public struct MINUTIAE
+        {
+            public int x;
+            public int y;//横纵坐标
+            public int type;//特征点类型（1：端点；3：分叉点）
+            public float theta;//该点处脊线方向（弧度）
+            public NEIGHBOUR[] neibors;//相邻点特征序列
+        };
+
         public Analysis()
         {
 
@@ -222,66 +247,61 @@ namespace Fingers
         /// </summary>
         public static Bitmap ImgDirection(Bitmap input, out float[] fFitDirc)
         {
-            // 验证输入为 8 位灰度图像
-            List<int> bitmapInfo = GetBitmapInfo(input);
-            int width = input.Width;
-            int height = input.Height;
-            fFitDirc = new float[width * height];
-            if (bitmapInfo[2] != 8 || input.PixelFormat != PixelFormat.Format8bppIndexed)
-                return null;
-            // 将位图转换为字节数组
             byte[] bytes = BmpToBytes(input);
-            // 计算原始方向场
-            float[] fDirc = CalculateDirectionField(bytes, width, height);
-            // 低通滤波平滑方向场
-            fFitDirc = DirectionLowPassFilter(fDirc, width, height);
-            // 生成可视化灰度位图（方向值映射到0-255）
-            byte[] resultBytes = new byte[width * height];
+            int w = input.Width;
+            int h = input.Height;
+            float[] fDirc = new float[w * h];
+            fFitDirc = new float[w * h];
+            fDirc = imgdirection(bytes, w, h);
+            fFitDirc = DircLowPass(fDirc, w, h);
             for (int i = 0; i < fFitDirc.Length; i++)
             {
-                resultBytes[i] = (byte)((fFitDirc[i] + Math.PI / 2) * 127 / Math.PI); // 方向映射到[0,255]
+                bytes[i] = (byte)(fFitDirc[i] * 100);
             }
-
-            return BuildGrayBitmap(resultBytes, width, height);
+            Bitmap output = BuildGrayBitmap(bytes, w, h);
+            return output;
         }
 
         /// <summary>
         /// 方向场计算核心算法
         /// </summary>
-        private static float[] CalculateDirectionField(byte[] bytes, int w, int h)
+        public static float[] imgdirection(byte[] bytes, int w, int h)
         {
+
             float[] fDirc = new float[w * h];
-            const int WindowR = 7; // 窗口半径
-            int windowSize = 2 * WindowR + 1;
-            for (int y = WindowR; y < h - WindowR; y++)
+            int[] Intarr = byteToInt(bytes);
+            const int WindowR = 7;//窗口半径
+            int[,] dx = new int[WindowR * 2 + 1, WindowR * 2 + 1];
+            int[,] dy = new int[WindowR * 2 + 1, WindowR * 2 + 1];
+            float fx, fy;
+            //计算每一像素的脊线方向
+            for (int y = WindowR + 1; y < h - WindowR - 1; y++)//逐行，除了边缘
             {
-                for (int x = WindowR; x < w - WindowR; x++)
+                for (int x = WindowR + 1; x < w - WindowR - 1; x++)//逐列，除了边缘
                 {
-                    double fx = 0, fy = 0;
-                    // 遍历窗口计算梯度统计量
-                    for (int j = -WindowR; j <= WindowR; j++)
+                    for (int j = 0; j < WindowR * 2 + 1; j++)
                     {
-                        for (int i = -WindowR; i <= WindowR; i++)
+                        for (int i = 0; i < WindowR * 2 + 1; i++)
                         {
-                            int currentY = y + j;
-                            int currentX = x + i;
-                            // 确保当前坐标在图像范围内
-                            if (currentY < 0 || currentY >= h || currentX < 0 || currentX >= w)
-                            {
-                                continue; // 跳过超出范围的坐标
-                            }
-                            int index = currentY * w + currentX;
-                            int indexLeft = currentY * w + Math.Max(0, currentX - 1); // 确保不超出左边界
-                            int indexTop = Math.Max(0, currentY - 1) * w + currentX; // 确保不超出上边界
-                            // 计算梯度 (dx, dy)
-                            int dx = bytes[index] - bytes[indexLeft];
-                            int dy = bytes[index] - bytes[indexTop];
-                            fx += 2 * dx * dy;  // 2 * Σ(dx*dy)
-                            fy += dx * dx - dy * dy; // Σ(dx² - dy²)
+                            int index1 = (y + j - WindowR) * w + x + i - WindowR;
+                            int index2 = (y + j - WindowR) * w + x + i - WindowR - 1;
+                            int index3 = (y + j - WindowR - 1) * w + x + i - WindowR;
+                            dx[i, j] = Intarr[index1] - Intarr[index2];
+                            dy[i, j] = Intarr[index1] - Intarr[index3];
                         }
                     }
-                    // 计算方向角度 (0.5 * arctan(fx/fy))
-                    fDirc[y * w + x] = (float)(0.5 * Math.Atan2(fx, fy));
+                    //计算当前像素脊线方向值
+                    fx = 0.0f; fy = 0.0f;
+                    for (int j = 0; j < WindowR * 2 + 1; j++)
+                    {
+                        for (int i = 0; i < WindowR * 2 + 1; i++)
+                        {
+                            fx += (float)(2 * dx[i, j] * dy[i, j] * 1.0);
+                            fy += (float)((dx[i, j] * dx[i, j] - dy[i, j] * dy[i, j]) * 1.0);
+
+                        }
+                    }
+                    fDirc[y * w + x] = (float)Math.Atan2(fx, fy);//此处转换可能存在精度问题
                 }
             }
             return fDirc;
@@ -290,65 +310,75 @@ namespace Fingers
         /// <summary>
         /// 方向场低通滤波
         /// </summary>
-        private static float[] DirectionLowPassFilter(float[] fDirc, int w, int h)
+        public static float[] DircLowPass(float[] fDirc, int w, int h)
         {
-            float[] fFitDirc = new float[w * h];
-            const int filterRadius = 2;
-            int filterSize = 2 * filterRadius + 1;
-            float[,] filter = CreateGaussianFilter(filterSize, 1.0f);
-            // 计算正弦和余弦分量
-            float[] sinTheta = new float[w * h];
-            float[] cosTheta = new float[w * h];
-            for (int i = 0; i < fDirc.Length; i++)
+            int arrsize = w * h;
+            float[] fFitDirc = new float[arrsize];
+            const int fisize = 2;
+            int blocksize = 2 * fisize + 1;
+            float[] filter = new float[blocksize * blocksize];
+            float[] phix = new float[arrsize];
+            float[] phiy = new float[arrsize];
+            float[] phi2x = new float[arrsize];
+            float[] phi2y = new float[arrsize];
+            float sum = 0.0f;
+            for (int y = 0; y < blocksize; y++)
             {
-                sinTheta[i] = (float)Math.Sin(2 * fDirc[i]); // 使用双倍角度处理方向周期性
-                cosTheta[i] = (float)Math.Cos(2 * fDirc[i]);
-            }
-            // 应用高斯滤波
-            for (int y = filterRadius; y < h - filterRadius; y++)
-            {
-                for (int x = filterRadius; x < w - filterRadius; x++)
+                for (int x = 0; x < blocksize; x++)
                 {
-                    float sumSin = 0, sumCos = 0;
-                    for (int j = -filterRadius; j <= filterRadius; j++)
+                    filter[y * blocksize + x] = (float)(blocksize - Math.Abs(fisize - x) + Math.Abs(fisize - y));
+                    sum += filter[y * blocksize + x];
+                }
+            }
+            for (int y = 0; y < blocksize; y++)
+            {
+                for (int x = 0; x < blocksize; x++)
+                {
+                    filter[y * blocksize + x] /= sum;
+                }
+            }
+            //计算各像素点的方向正弦值，余弦值
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    phix[y * w + x] = (float)Math.Cos(fDirc[y * w + x]);
+                    phiy[y * w + x] = (float)Math.Sin(fDirc[y * w + x]);
+                }
+            }
+            //对所有像素进行低通滤波
+            float nx, ny;
+            int val;
+            for (int y = 0; y < h - blocksize; y++)
+            {
+                for (int x = 0; x < w - blocksize; x++)
+                {
+                    nx = 0.0f; ny = 0.0f;
+                    for (int j = 0; j < blocksize; j++)
                     {
-                        for (int i = -filterRadius; i <= filterRadius; i++)
+                        for (int i = 0; i < blocksize; i++)
                         {
-                            int index = (y + j) * w + (x + i);
-                            float weight = filter[j + filterRadius, i + filterRadius];
-                            sumSin += weight * sinTheta[index];
-                            sumCos += weight * cosTheta[index];
+                            val = (x + i) + (j + y) * w;
+                            nx += filter[j * blocksize + i] * phix[val];
+                            ny += filter[j * blocksize + i] * phiy[val];
                         }
                     }
-                    // 计算平均角度
-                    fFitDirc[y * w + x] = (float)(0.5 * Math.Atan2(sumSin, sumCos));
+                    val = x + y * w;
+                    phi2x[val] = nx;
+                    phi2y[val] = ny;
                 }
             }
-            return fFitDirc;
-        }
-
-        /// <summary>
-        /// 生成高斯滤波核
-        /// </summary>
-        private static float[,] CreateGaussianFilter(int size, float sigma)
-        {
-            float[,] filter = new float[size, size];
-            float sum = 0;
-            int radius = size / 2;
-            for (int y = -radius; y <= radius; y++)
+            //根据加权累加累加结果，计算各像素的方向滤波结果值
+            for (int y = 0; y < h - blocksize; y++)
             {
-                for (int x = -radius; x <= radius; x++)
+                for (int x = 0; x < w - blocksize; x++)
                 {
-                    float value = (float)Math.Exp(-(x * x + y * y) / (2 * sigma * sigma));
-                    filter[y + radius, x + radius] = value;
-                    sum += value;
+                    val = x + y * w;
+                    fFitDirc[val] = (float)(Math.Atan2(phi2y[val], phi2x[val]) * 0.5);
                 }
             }
-            // 归一化
-            for (int y = 0; y < size; y++)
-                for (int x = 0; x < size; x++)
-                    filter[y, x] /= sum;
-            return filter;
+
+            return fFitDirc;
         }
 
         /// <summary>
@@ -685,41 +715,603 @@ namespace Fingers
         /// <summary>
         /// 细化
         /// </summary>
-        public static Bitmap Thinning(Bitmap input)
+        public static Bitmap Thinning(Bitmap input, byte[] ucBinImage, out byte[] ucThinnedImage, int count)
         {
-            Bitmap output = null;
-
+            int w = input.Width;
+            int h = input.Height;
+            thining(w, h, count, ucBinImage, out  ucThinnedImage);
+            byte[] bytesCopy = new byte[w * h];
+            for(int i = 0; i<bytesCopy.Length;i++)
+            {
+                if (ucThinnedImage[i] == 0)
+                {
+                    bytesCopy[i] = 0;
+                }
+                else
+                {
+                    bytesCopy[i] = 255;
+                }
+            }
+            Bitmap output = BuildGrayBitmap(bytesCopy, w, h);
             return output;
+        }
+
+        /// <summary>
+        /// 细化核心代码
+        /// </summary>
+        private static void thining(int w, int h, int count, byte[] ucBinImage, out byte[] ucThinnedImage)
+        {
+            byte x1, x2, x3, x4, x5, x6, x7, x8, xp;
+            byte g1, g2, g3, g4;
+            byte b1 = 0, b2 = 0, b3 = 0, b4 = 0;
+            byte np1, np2, npm;
+            int pUp, pDown, pImg;
+            int iDlePoints = 0;
+            ucThinnedImage = new byte[w * h];
+            Array.Copy(ucBinImage, ucThinnedImage, w * h);
+            for (int it = 0; it < count; it++)
+            {
+                iDlePoints = 0;//初始化本次迭代删除点数
+                //本次迭代的第一次遍历
+                for (int i = 1; i < h - 1; i++)//逐行遍历
+                {
+                    pUp = (i - 1) * w;
+                    pImg = i * w;
+                    pDown = (i + 1) * w;
+                    for (int j = 1; j < w - 1; j++)//=逐列遍历
+                    {
+                        pUp++;
+                        pImg++;
+                        pDown++;
+                        if (ucThinnedImage[pImg] == 0)
+                        {
+                            continue;
+                        }
+                        //获取3*3邻域窗口内9个像素的灰度值
+                        x6 = ucThinnedImage[pUp - 1];
+                        x5 = ucThinnedImage[pImg - 1];
+                        x4 = ucThinnedImage[pDown - 1];
+                        x7 = ucThinnedImage[pUp];
+                        xp = ucThinnedImage[pImg];
+                        x3 = ucThinnedImage[pDown];
+                        x8 = ucThinnedImage[pUp + 1];
+                        x1 = ucThinnedImage[pImg + 1];
+                        x2 = ucThinnedImage[pDown + 1];
+                        //判断条件G1
+                        if (x1 == 0 && (x2 == 1 || x3 == 1)) b1 = 1;
+                        else b1 = 0;
+                        if (x3 == 0 && (x4 == 1 || x5 == 1)) b2 = 1;
+                        else b2 = 0;
+                        if (x5 == 0 && (x6 == 1 || x7 == 1)) b3 = 1;
+                        else b3 = 0;
+                        if (x7 == 0 && (x8 == 1 || x1 == 1)) b4 = 1;
+                        else b4 = 0;
+                        if (b1 + b2 + b3 + b4 != 0) g1 = 1;
+                        else g1 = 0;
+                        //判断条件g2
+                        if (x1 + x2 != 0) np1 = 1;
+                        else np1 = 0;
+                        if (x3 + x4 != 0) np1++;
+                        if (x5 + x6 != 0) np1++;
+                        if (x7 + x8 != 0) np1++;
+                        if (x2 + x3 != 0) np2 = 1;
+                        else np2 = 0;
+                        if (x4 + x5 != 0) np2++;
+                        if (x7 + x6 != 0) np2++;
+                        if (x1 + x8 != 0) np2++;
+                        npm = np1 > np2 ? np2 : np1;
+                        if (npm >= 2 && npm <= 3) g2 = 1;
+                        else g2 = 0;
+                        //判断g3，g4
+                        int temp;
+                        if (x1 != 0 && (x2 != 0 || x3 != 0 || x8 != 1)) temp = 1;
+                        else temp = 0;
+                        if (temp == 0) g3 = 1;
+                        else g3 = 0;
+                        int temp1;
+                        if (x5 != 0 && (x6 != 0 || x7 != 0 || x4 != 1)) temp1 = 1;
+                        else temp1 = 0;
+                        if (temp1 == 0) g4 = 1;
+                        else g4 = 0;
+                        //组合判断
+                        if (g1 != 0 && g2 != 0 && g3 != 0)
+                        {
+                            ucThinnedImage[w * i + j] = 0;
+                            ++iDlePoints;
+                        }
+                    }
+                }
+                //结果同步
+                Array.Copy(ucThinnedImage, ucBinImage, w * h);
+                //迭代第二次遍历
+                for (int i = 1; i < h - 1; i++)
+                {
+                    pUp = (i - 1) * w;
+                    pImg = i * w;
+                    pDown = (i + 1) * w;
+                    for (int j = 1; j < w - 1; j++)
+                    {
+                        pUp++;
+                        pImg++;
+                        pDown++;
+                        if (ucThinnedImage[pImg] == 0)
+                        {
+                            continue;
+                        }
+                        //获取3*3邻域窗口内9个像素的灰度值
+                        x6 = ucThinnedImage[pUp - 1];
+                        x5 = ucThinnedImage[pImg - 1];
+                        x4 = ucThinnedImage[pDown - 1];
+                        x7 = ucThinnedImage[pUp];
+                        xp = ucThinnedImage[pImg];
+                        x3 = ucThinnedImage[pDown];
+                        x8 = ucThinnedImage[pUp + 1];
+                        x1 = ucThinnedImage[pImg + 1];
+                        x2 = ucThinnedImage[pDown + 1];
+                        //判断条件G1
+                        if (x1 == 0 && (x2 == 1 || x3 == 1)) b1 = 1;
+                        else b1 = 0;
+                        if (x3 == 0 && (x4 == 1 || x5 == 1)) b2 = 1;
+                        else b2 = 0;
+                        if (x5 == 0 && (x6 == 1 || x7 == 1)) b3 = 1;
+                        else b3 = 0;
+                        if (x7 == 0 && (x8 == 1 || x1 == 1)) b4 = 1;
+                        else b4 = 0;
+                        if (b1 + b2 + b3 + b4 != 0) g1 = 1;
+                        else g1 = 0;
+                        //判断条件g2
+                        if (x1 + x2 != 0) np1 = 1;
+                        else np1 = 0;
+                        if (x3 + x4 != 0) np1++;
+                        if (x5 + x6 != 0) np1++;
+                        if (x7 + x8 != 0) np1++;
+                        if (x2 + x3 != 0) np2 = 1;
+                        else np2 = 0;
+                        if (x4 + x5 != 0) np2++;
+                        if (x7 + x6 != 0) np2++;
+                        if (x1 + x8 != 0) np2++;
+                        npm = np1 > np2 ? np2 : np1;
+                        if (npm >= 2 && npm <= 3) g2 = 1;
+                        else g2 = 0;
+                        //判断g3，g4
+                        int temp;
+                        if (x1 != 0 && (x2 != 0 || x3 != 0 || x8 != 1)) temp = 1;
+                        else temp = 0;
+                        if (temp == 0) g3 = 1;
+                        else g3 = 0;
+                        int temp1;
+                        if (x5 != 0 && (x6 != 0 || x7 != 0 || x4 != 1)) temp1 = 1;
+                        else temp1 = 0;
+                        if (temp1 == 0) g4 = 1;
+                        else g4 = 0;
+                        //组合判断
+                        if (g1 != 0 && g2 != 0 && g4 != 0)
+                        {
+                            ucThinnedImage[w * i + j] = 0;
+                            ++iDlePoints;
+                        }
+                    }
+                }
+                //结果同步
+                Array.Copy(ucThinnedImage, ucBinImage, w * h);
+                //若本次迭代无点可删除，停止迭代
+                if (iDlePoints == 0)//
+                {
+                    break;
+                }
+            }
+            //清除边缘区段
+            for (int i = 0; i < w; i++)
+            {
+                for (int j = 0; j < w; j++)
+                {
+                    if (i < 16)//上边缘
+                        ucThinnedImage[i * w + j] = 0;
+                    else if (i >= h - 16)//下边缘
+                        ucThinnedImage[i * w + j] = 0;
+                    else if (j < 16)//左边缘
+                        ucThinnedImage[i * w + j] = 0;
+                    else if (j >= w - 16)//右边缘
+                        ucThinnedImage[i * w + j] = 0;
+                }
+            }
         }
 
         /// <summary>
         /// 特征提取
         /// </summary>
-        public static Bitmap Extract(Bitmap input)
+        public static Bitmap Extract(Bitmap input, byte[] ucThinImg, out byte[] ucMinuImg, out int count)
         {
-            Bitmap output = null;
-
+            int w = input.Width;
+            int h = input.Height;
+            extract(w, h, ucThinImg, out ucMinuImg, out count);
+            byte[] bytesCopy = new byte[w * h];
+            for (int i = 0; i < bytesCopy.Length; i++)
+            {
+                if (ucMinuImg[i] == 0)
+                {
+                    bytesCopy[i] = 0;
+                }
+                else
+                {
+                    bytesCopy[i] = 255;
+                }
+            }
+            Bitmap output = BuildGrayBitmap(bytesCopy, w, h);
             return output;
+        }
+
+        /// <summary>
+        /// 特征提取核心代码
+        /// </summary>
+        private static void extract(int w, int h, byte[] ucThinImg, out byte[] ucMinuImg, out int count)
+        {
+            int pUp, pDown, pImg;
+            byte x1, x2, x3, x4, x5, x6, x7, x8;
+            int nc;//八邻点中黑点数量
+            ucMinuImg = new byte[w * h];
+            count = 0;
+            //遍历源图提取特征
+            for (int i = 1; i < h - 1; i++)//逐行遍历
+            {
+                pUp = (i - 1) * w;
+                pImg = i * w;
+                pDown = (i + 1) * w;
+                for (int j = 1; j < w - 1; j++)//逐列遍历
+                {
+                    pUp++;
+                    pImg++;
+                    pDown++;
+                    if (ucThinImg[pImg] == 0)
+                    {
+                        continue;
+                    }
+                    //获取3*3邻域窗口内9个像素的灰度值
+                    x6 = ucThinImg[pUp - 1];
+                    x5 = ucThinImg[pImg - 1];
+                    x4 = ucThinImg[pDown - 1];
+                    x7 = ucThinImg[pUp];
+                    x3 = ucThinImg[pDown];
+                    x8 = ucThinImg[pUp + 1];
+                    x1 = ucThinImg[pImg + 1];
+                    x2 = ucThinImg[pDown + 1];
+                    //统计八邻点黑点数
+                    nc = (byte)(x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8);
+                    //特征点判断
+                    if (nc == 1)//端点
+                    {
+                        ucMinuImg[i * w + j] = 1;
+                        ++count;//特征点数量+1
+                    }
+                    else if (nc == 3)
+                    {
+                        ucMinuImg[i * w + j] = 3;
+                        ++count;//特征点数量+1
+                    }
+                }
+            }
         }
 
         /// <summary>
         /// 特征过滤
         /// </summary>
-        public static Bitmap MinuFilter(Bitmap input)
+        public static Bitmap MinuFilter(Bitmap input, byte[] thinData, byte[] minuData, out MINUTIAE[] minutiaes, ref int minuCount)
         {
-            Bitmap output = null;
-
+            int w = input.Width;
+            int h = input.Height;
+            MinuFilter(w, h, thinData, minuData, out minutiaes, ref minuCount);
+            byte[] bytesCopy = new byte[w * h];
+            for (int i = 0; i < bytesCopy.Length; i++)
+            {
+                bytesCopy[i] = 0;
+            }
+            for (int i = 0; i < minuCount; i++)
+            {
+                bytesCopy[(minutiaes[i].y - 1) * w + (minutiaes[i].x - 1)] = 255;
+            }
+            Bitmap output = BuildGrayBitmap(bytesCopy, w, h);
             return output;
         }
 
         /// <summary>
-        /// 边缘特征点去除
+        /// 特征过滤核心算法
         /// </summary>
-        public static Bitmap CutEdge(Bitmap input)
+        public static void MinuFilter(int w, int h, byte[] thinData, byte[] minuData, out MINUTIAE[] minutiaes, ref int minuCount)
         {
-            Bitmap output = null;
+            //1.计算细化图中各点方向
+            float[] dir = new float[w * h];
+            minutiaes = new MINUTIAE[w * h];
+            dir = imgdirection(thinData, w, h);
+            //2.从特征图中提取特征点数据
+            int pImg;
+            byte val;
+            int temp = 0;
+            for (int i = 1; i < h - 1; i++)
+            {
+                pImg = i * w;
+                for (int j = 1; j < w - 1; j++)
+                {
+                    //获取特征图数据
+                    pImg++;
+                    val = minuData[pImg];
+                    //提取特征点数据
+                    if (val > 0)
+                    {
+                        minutiaes[temp].x = j + 1;
+                        minutiaes[temp].y = i + 1;
+                        minutiaes[temp].theta = dir[i * w + j];//脊线方向
+                        minutiaes[temp].type = (int)val;
+                        temp++;
+                    }
 
-            return output;
+                }
+            }
+            Array.Copy(minutiaes, minutiaes, temp);
+            //第三步：去除边缘特征点
+            minuCount = CutEdge(minutiaes, minuCount, thinData, w, h);
+            //第四步：去除毛刺、小孔，间断等伪特征点
+            int[] pFlag = new int[minuCount];//0:保留；1：删除；
+            //遍历所有特征点
+            int x1, x2, y1, y2, type1, type2;
+            for (int i = 0; i < minuCount; i++)//特征点1遍历
+            {
+                //获取特征点1的数据
+                x1 = minutiaes[i].x;
+                y1 = minutiaes[i].y;
+                type1 = minutiaes[i].type;//特征点类型
+                for (int j = i + 1; j < minuCount; j++)//遍历特征点2
+                {
+                    //跳过已删特征点
+                    if (pFlag[j] == 1)
+                    {
+                        continue;
+                    }
+                    //获取特征点2的数据
+                    x2 = minutiaes[j].x;
+                    y2 = minutiaes[j].y;
+                    type2 = minutiaes[j].type;//特征点类型
+                    //计算两点间间距
+                    int r = (int)(Math.Sqrt((float)((y1 - y2) * (y1 - y2) + (x1 - x2) * (x1 - x2))));
+                    //删除间距过小的特征点
+                    if (r <= 4)//距离小于5删除
+                    {
+                        if (type1 == type2)//二者类型相同
+                        {
+                            if (type1 == 1)
+                            {
+                                pFlag[i] = pFlag[j] = 1;//同时删掉两点
+                            }
+                            else//两点均为分叉点，则认定为小孔
+                            {
+                                pFlag[j] = 1;//只删除点2
+                            }
+                        }
+                        else if (type1 == 1)//1为端点，2为分叉点，则1为毛刺
+                        {
+                            pFlag[i] = 1;
+                        }
+                        else//2为毛刺
+                        {
+                            pFlag[j] = 1;
+                        }
+                    }
+                }
+
+            }
+            //重组特征点结构数组
+            int newCount = 0;//有效特征点数量
+            for (int i = 0; i < minuCount; i++)
+            {
+                if (pFlag[i] == 0)
+                {
+                    minutiaes[newCount] = minutiaes[i];
+                    newCount++;
+                }
+            }
+            minuCount = newCount;//保存有效特征点数量
+            Array.Copy(minutiaes, minutiaes, minuCount);
+        }
+
+        /// <summary>
+        /// 去除边缘特征点
+        /// </summary>
+        private static int CutEdge(MINUTIAE[] minutiaes, int count, byte[] thinData, int w, int h)
+        {
+            //定义变量
+            int minuCount = count;
+            int x, y, type;
+            bool del;
+            //初始化标记数组
+            int[] pFlag = new int[minuCount];
+            //遍历所有特征点
+            for (int i = 0; i < minuCount; i++)
+            {
+                //获取当前特征点信息
+                y = minutiaes[i].y - 1;
+                x = minutiaes[i].x - 1;
+                type = minutiaes[i].type;
+                //将当前特征点删除标记初始化为true
+                del = true;
+                //根据当前特征点位置判断是否为边远特征点
+                if (x < w / 2)//位于左半图
+                {
+                    if (Math.Abs(w / 2 - x) > Math.Abs(h / 2 - 2))//位于左半图左侧
+                    {
+                        //在特征图中查找当前特征点同一行左侧是否还有其它特征点
+                        while (--x >= 0)//逐一左移查找
+                        {
+                            //如果在左侧存在其他特征点，则说明当前特征点不是边缘特征点，无须删除
+                            if (thinData[x + y * w] > 0)
+                            {
+                                del = false;
+                                break;
+                            }
+                        }
+                    }
+                    else//左半图右侧
+                    {
+                        if (y > h / 2)//右下侧
+                        {
+                            while (++y < h)
+                            {
+                                if (thinData[x + y * w] > 0)
+                                {
+                                    del = false;
+                                    break;
+                                }
+                            }
+                        }
+                        else//位于右上侧
+                        {
+                            while (--y >= 0)
+                            {
+                                if (thinData[x + y * w] > 0)
+                                {
+                                    del = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                //如果位于图像右半图
+                else
+                {
+                    if (Math.Abs(w / 2 - x) > Math.Abs(h / 2 - y))//右侧
+                    {
+                        while (++x < w)
+                        {
+                            if (thinData[x + y * w] > 0)
+                            {
+                                del = false;
+                                break;
+                            }
+                        }
+                    }
+                    else//左侧
+                    {
+                        if (y > h / 2)//左下侧
+                        {
+                            while (++y < h)
+                            {
+                                if (thinData[x + y * w] > 0)
+                                {
+                                    del = false;
+                                    break;
+                                }
+                            }
+                        }
+                        else//左上侧
+                        {
+                            while (--y >= 0)
+                            {
+                                if (thinData[x + y * w] > 0)
+                                {
+                                    del = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                //如果当前特征点是边缘特征点，则予以删除
+                if (del)
+                {
+                    pFlag[i] = 1;
+                    continue;
+                }
+            }
+            //重组特征点结构数组
+            int newCount = 0;
+            for (int i = 0; i < minuCount; i++)
+            {
+                if (pFlag[i] == 0)
+                {
+                    minutiaes[newCount] = minutiaes[i];
+                    newCount++;
+                }
+            }
+            Array.Copy(minutiaes, minutiaes, newCount);//此处可能存在问题
+            pFlag = null;
+            return newCount;
+        }
+
+        /// <summary>
+        /// 特征匹配算法
+        /// </summary>
+        // TODO: 该算法存在问题
+        public static bool CompareMinutiaeArrays(MINUTIAE[] minutiae1, MINUTIAE[] minutiae2, double similarityThreshold = 0.7)
+        {
+            // 如果两个数组为空或长度差异过大，直接返回 false
+            if (minutiae1 == null || minutiae2 == null)
+            {
+                return false;
+            }
+            if (Math.Abs(minutiae1.Length - minutiae2.Length) > minutiae1.Length * 0.3) // 允许一定数量差异
+            {
+                return false;
+            }
+            // 提取特征点的哈希表，方便快速查找
+            Dictionary<(int x, int y), MINUTIAE> minutiaeMap1 = CreateMinutiaeMap(minutiae1);
+            Dictionary<(int x, int y), MINUTIAE> minutiaeMap2 = CreateMinutiaeMap(minutiae2);
+            int matchingMinutiae = 0;
+            // 遍历第一个数组中的每个特征点
+            foreach (MINUTIAE m1 in minutiae1)
+            {
+                // 在第二个数组中查找匹配的特征点
+                if (minutiaeMap2.TryGetValue((m1.x, m1.y), out MINUTIAE m2))
+                {
+                    // 比较特征点的类型和脊线方向
+                    if (m1.type == m2.type && Math.Abs(m1.theta - m2.theta) < 0.2) // 方向差异小于 0.2 弧度
+                    {
+                        // 比较相邻点
+                        if (CompareNeighbours(m1.neibors, m2.neibors))
+                        {
+                            matchingMinutiae++;
+                        }
+                    }
+                }
+            }
+            // 计算相似度
+            double similarity = (double)matchingMinutiae / Math.Max(minutiae1.Length, minutiae2.Length);
+            return similarity >= similarityThreshold;
+        }
+
+        private static Dictionary<(int x, int y), MINUTIAE> CreateMinutiaeMap(MINUTIAE[] minutiae)
+        {
+            Dictionary<(int x, int y), MINUTIAE> map = new Dictionary<(int x, int y), MINUTIAE>();
+            foreach (MINUTIAE m in minutiae)
+            {
+                map[(m.x, m.y)] = m;
+            }
+            return map;
+        }
+
+        private static bool CompareNeighbours(NEIGHBOUR[] neibors1, NEIGHBOUR[] neibors2)
+        {
+            if (neibors1 == null || neibors2 == null)
+            {
+                return false;
+            }
+            if (neibors1.Length != neibors2.Length)
+            {
+                return false;
+            }
+            // 比较相邻点的特征
+            for (int i = 0; i < neibors1.Length; i++)
+            {
+                NEIGHBOUR n1 = neibors1[i];
+                NEIGHBOUR n2 = neibors2[i];
+
+                if (n1.type != n2.type || Math.Abs(n1.Theta - n2.Theta) > 0.2 ||
+                    Math.Abs(n1.Theta2Ridge - n2.Theta2Ridge) > 0.2 ||
+                    Math.Abs(n1.ThetaThisNibor - n2.ThetaThisNibor) > 0.2 ||
+                    Math.Abs(n1.distance - n2.distance) > 5)
+                {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 }

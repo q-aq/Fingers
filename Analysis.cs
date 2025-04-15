@@ -18,6 +18,24 @@ namespace Fingers
     public class Analysis//指纹分析类
     {
 
+        public readonly struct Transform
+        {
+            public readonly float RotAngle;
+            public readonly float Cos;
+            public readonly float Sin;
+            public readonly int Dx;
+            public readonly int Dy;
+
+            public Transform(float angle, int dx, int dy)
+            {
+                RotAngle = angle;
+                Cos = (float)Math.Cos(angle);
+                Sin = (float)Math.Sin(angle);
+                Dx = dx;
+                Dy = dy;
+            }
+        }
+
         [Serializable]
         public struct NEIGHBOUR
         {
@@ -40,6 +58,11 @@ namespace Fingers
             public float theta;//该点处脊线方向（弧度）
             public NEIGHBOUR[] neibors;//相邻点特征序列
         };
+
+        private const int MaxFeatures = 100;         // 最大处理特征点数
+        private const float MatchDistance = 20f;     // 匹配距离阈值
+        private const float MatchAngle = 0.5f;       // 弧度角度阈值
+        private const int HashSize = 50;             // 空间哈希网格尺寸
 
         public Analysis()
         {
@@ -448,6 +471,11 @@ namespace Fingers
                         if (minpeak > xsig[k]) { minpeak = xsig[k]; }
                         if (maxpeak < xsig[k]) { maxpeak = xsig[k]; }
                     }
+
+                    for(int i = 1;i< l1 - 1;i++)
+                    {
+                        xsig[i] = (xsig[i - 1] + xsig[i] + xsig[i + 1]) / 3.0f;
+                    }
                     //确定峰值点位置
                     peak_cnt = 0;
                     if ((maxpeak - minpeak) > 64)
@@ -491,7 +519,7 @@ namespace Fingers
                     //使用以当前像素为中心的5*5邻域窗口进行均值滤波
                     for (v = -2; v <= 2; v++)
                     {
-                        for (u = -2; u < 2; u++)
+                        for (u = -2; u <= 2; u++)
                         {
                             peak_freq += freq1[(x + u) + (y + v) * w];//求频率累加和
                         }
@@ -1037,8 +1065,8 @@ namespace Fingers
                     //提取特征点数据
                     if (val > 0)
                     {
-                        minutiaes[temp].x = j + 1;
-                        minutiaes[temp].y = i + 1;
+                        minutiaes[temp].x = j;
+                        minutiaes[temp].y = i;
                         minutiaes[temp].theta = dir[i * w + j];//脊线方向
                         minutiaes[temp].type = (int)val;
                         temp++;
@@ -1127,15 +1155,15 @@ namespace Fingers
             for (int i = 0; i < minuCount; i++)
             {
                 //获取当前特征点信息
-                y = minutiaes[i].y - 1;
-                x = minutiaes[i].x - 1;
+                y = minutiaes[i].y;
+                x = minutiaes[i].x;
                 type = minutiaes[i].type;
                 //将当前特征点删除标记初始化为true
                 del = true;
                 //根据当前特征点位置判断是否为边远特征点
                 if (x < w / 2)//位于左半图
                 {
-                    if (Math.Abs(w / 2 - x) > Math.Abs(h / 2 - 2))//位于左半图左侧
+                    if (Math.Abs(w / 2 - x) > Math.Abs(h / 2 - y))//位于左半图左侧
                     {
                         //在特征图中查找当前特征点同一行左侧是否还有其它特征点
                         while (--x >= 0)//逐一左移查找
@@ -1239,79 +1267,72 @@ namespace Fingers
         /// <summary>
         /// 特征匹配算法
         /// </summary>
-        // TODO: 该算法存在问题
-        public static bool CompareMinutiaeArrays(MINUTIAE[] minutiae1, MINUTIAE[] minutiae2, double similarityThreshold = 0.7)
+        public static bool IsMatch(MINUTIAE[] template, MINUTIAE[] sample)
         {
-            // 如果两个数组为空或长度差异过大，直接返回 false
-            if (minutiae1 == null || minutiae2 == null)
+            // 特征点数量限制
+            var tFeatures = GetTopFeatures(template, MaxFeatures);
+            var sFeatures = GetTopFeatures(sample, MaxFeatures);
+
+            // 构建空间哈希表
+            var hashTable = BuildHashTable(tFeatures);
+
+            int matches = 0;
+            foreach (var s in sFeatures)
             {
-                return false;
-            }
-            if (Math.Abs(minutiae1.Length - minutiae2.Length) > minutiae1.Length * 0.3) // 允许一定数量差异
-            {
-                return false;
-            }
-            // 提取特征点的哈希表，方便快速查找
-            Dictionary<(int x, int y), MINUTIAE> minutiaeMap1 = CreateMinutiaeMap(minutiae1);
-            Dictionary<(int x, int y), MINUTIAE> minutiaeMap2 = CreateMinutiaeMap(minutiae2);
-            int matchingMinutiae = 0;
-            // 遍历第一个数组中的每个特征点
-            foreach (MINUTIAE m1 in minutiae1)
-            {
-                // 在第二个数组中查找匹配的特征点
-                if (minutiaeMap2.TryGetValue((m1.x, m1.y), out MINUTIAE m2))
+                // 快速空间查询
+                var cell = ((int)(s.x / HashSize), (int)(s.y / HashSize));
+                if (!hashTable.TryGetValue(cell, out var candidates)) continue;
+
+                foreach (var t in candidates)
                 {
-                    // 比较特征点的类型和脊线方向
-                    if (m1.type == m2.type && Math.Abs(m1.theta - m2.theta) < 0.2) // 方向差异小于 0.2 弧度
-                    {
-                        // 比较相邻点
-                        if (CompareNeighbours(m1.neibors, m2.neibors))
-                        {
-                            matchingMinutiae++;
-                        }
-                    }
+                    if (t.type != s.type) continue;
+
+                    // 快速距离检查
+                    float dx = t.x - s.x;
+                    float dy = t.y - s.y;
+                    if (dx * dx + dy * dy > MatchDistance * MatchDistance) continue;
+
+                    // 粗略角度检查
+                    if (Math.Abs(t.theta - s.theta) > MatchAngle) continue;
+
+                    matches++;
+                    break; // 每个样本点只匹配一个模板点
                 }
+
+                // 快速提前退出
+                if (matches >= MaxFeatures / 2) return true;
             }
-            // 计算相似度
-            double similarity = (double)matchingMinutiae / Math.Max(minutiae1.Length, minutiae2.Length);
-            return similarity >= similarityThreshold;
+
+            return matches >= MaxFeatures / 3;
         }
 
-        private static Dictionary<(int x, int y), MINUTIAE> CreateMinutiaeMap(MINUTIAE[] minutiae)
+        #region 核心优化方法
+        // 获取质量最高的前N个特征点
+        private static List<MINUTIAE> GetTopFeatures(MINUTIAE[] source, int max)
         {
-            Dictionary<(int x, int y), MINUTIAE> map = new Dictionary<(int x, int y), MINUTIAE>();
-            foreach (MINUTIAE m in minutiae)
-            {
-                map[(m.x, m.y)] = m;
-            }
-            return map;
+            return source?
+                .OrderByDescending(m => m.type) // 优先分叉点
+                .ThenBy(m => m.x + m.y)        // 空间分布排序
+                .Take(max)
+                .ToList() ?? new List<MINUTIAE>();
         }
 
-        private static bool CompareNeighbours(NEIGHBOUR[] neibors1, NEIGHBOUR[] neibors2)
+        // 构建空间哈希表
+        private static Dictionary<(int, int), List<MINUTIAE>> BuildHashTable(List<MINUTIAE> features)
         {
-            if (neibors1 == null || neibors2 == null)
+            var dict = new Dictionary<(int, int), List<MINUTIAE>>();
+            foreach (var f in features)
             {
-                return false;
-            }
-            if (neibors1.Length != neibors2.Length)
-            {
-                return false;
-            }
-            // 比较相邻点的特征
-            for (int i = 0; i < neibors1.Length; i++)
-            {
-                NEIGHBOUR n1 = neibors1[i];
-                NEIGHBOUR n2 = neibors2[i];
-
-                if (n1.type != n2.type || Math.Abs(n1.Theta - n2.Theta) > 0.2 ||
-                    Math.Abs(n1.Theta2Ridge - n2.Theta2Ridge) > 0.2 ||
-                    Math.Abs(n1.ThetaThisNibor - n2.ThetaThisNibor) > 0.2 ||
-                    Math.Abs(n1.distance - n2.distance) > 5)
+                var key = ((int)(f.x / HashSize), (int)(f.y / HashSize));
+                if (!dict.TryGetValue(key, out var list))
                 {
-                    return false;
+                    list = new List<MINUTIAE>(4); // 预分配小容量
+                    dict[key] = list;
                 }
+                list.Add(f);
             }
-            return true;
+            return dict;
         }
+        #endregion
     }
 }

@@ -9,6 +9,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -33,6 +34,7 @@ namespace Fingers
         public byte[] ExtractData;//特征提取数据
         public int Extrcount = 0;//特征提取返回的count
         MINUTIAE[] Minutiaes;//特征点
+
         public MainForm()
         {
             InitializeComponent();
@@ -400,7 +402,41 @@ namespace Fingers
 
         private void ButtonThirteen_Click(object sender, EventArgs e)//特征匹配
         {
+            Comprose();
+        }
 
+        public void Comprose()
+        {
+            MINUTIAE[] minutiaes1;
+            Bitmap res = SaveMinutiae(CurrentImage, out minutiaes1);//待匹配图片
+            if (pictureBox1.Image != null)
+                pictureBox1.Image.Dispose();
+            pictureBox1.Image = (Bitmap)res.Clone();
+            //遍历数据库
+            string sql = "select username, image_path from fingerprints";
+            object data = db.Exec(sql);
+            if (data is DataTable dt && dt.Rows.Count > 0)
+            {
+                foreach (DataRow dr in dt.Rows)
+                {
+                    string username = dr[0].ToString();
+                    string filepath = dr[1].ToString();
+                    Bitmap temp = ImageHelper.LoadBitmapFromFile(filepath);//数据库中加载的图片
+                    MINUTIAE[] minutiaes2;
+                    using (Bitmap res2 = SaveMinutiae(temp, out minutiaes2))
+                    {
+                        if(pictureBox2.Image != null)
+                            pictureBox2.Image.Dispose();
+                        pictureBox2.Image = (Bitmap)res2.Clone();
+                    }
+                    if(Analysis.IsMatch(minutiaes1, minutiaes2))
+                    {
+                        MessageBox.Show($"识别成功:{username}");
+                        return;
+                    }
+                }
+                MessageBox.Show("未匹配到正确结果");
+            }
         }
 
         /// <summary>
@@ -444,34 +480,7 @@ namespace Fingers
         /// </summary>
         private void ButtonIdentify_Click(object sender, EventArgs e)//识别
         {
-            MINUTIAE[] minutiaes1;
-            Bitmap res = SaveMinutiae(CurrentImage, out minutiaes1);
-            if (pictureBox1.Image != null)
-                pictureBox1.Image.Dispose();
-            pictureBox1.Image = (Bitmap)res.Clone();
-            //遍历数据库
-            string sql = "select username, image_path from fingerprints";
-            object data = db.Exec(sql);
-            if(data is DataTable dt && dt.Rows.Count > 0)
-            {
-                foreach (DataRow dr in dt.Rows)
-                {
-                    string username = dr[0].ToString();
-                    string filepath = dr[1].ToString();
-                    Bitmap temp = ImageHelper.LoadBitmapFromFile(filepath);
-                    MINUTIAE[] minutiaes2;
-                    Bitmap res2 = SaveMinutiae(CurrentImage, out minutiaes2);
-                    if (pictureBox2.Image != null)
-                        pictureBox2.Image.Dispose();
-                    pictureBox2.Image = (Bitmap)res2.Clone();
-                    if (Analysis.CompareMinutiaeArrays(minutiaes1, minutiaes2))
-                    {
-                        MessageBox.Show($"识别成功:{username}");
-                        return;
-                    }
-                }
-                MessageBox.Show("未匹配到正确结果");
-            }
+            Comprose();
         }
     }
 }

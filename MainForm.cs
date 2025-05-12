@@ -49,7 +49,6 @@ namespace Fingers
             db = new Sql();
         }
 
-
         public static int DeleteAllFiles(string folderPath, bool recursive = false, bool ignoreErrors = true)
         {
             if (!Directory.Exists(folderPath))
@@ -105,16 +104,6 @@ namespace Fingers
             Bitmap output = Analysis.MinuFilter(step2, ThinnedData, ExtractData, out Minutiaes, ref Extrcount);//特征过滤
             minutiaes = Minutiaes;
             return output;
-        }
-
-        public void BuildNabors()//获取特征点相邻关系
-        {
-
-        }
-
-        public double MinuSimilarity()//获取特征匹配相似度
-        {
-            return 0.0;
         }
 
         private void RefreshImage()//刷新图片
@@ -188,10 +177,10 @@ namespace Fingers
                     Thread captureThread = new Thread(RefreshImage);
                     captureThread.Start();
                 }
+                textBox2.Text = "设备启动完毕";
+                return;
             }
-            // TODO: 测试用
-            this.ButtonFirst.Enabled = true;
-            this.ButtonGather.Enabled=true;
+            textBox2.Text = "设备启动失败";
         }
 
         private void ButtonGather_Click(object sender, EventArgs e)//采集
@@ -284,6 +273,7 @@ namespace Fingers
             Bitmap res = Analysis.MidFilter(CurrentImage);
             Update(res);
             ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step2.bmp",ImageFormat.Bmp);
+            textBox2.Text = "完成中值滤波";
         }
 
         private void ButtonThird_Click(object sender, EventArgs e)//均衡化
@@ -297,6 +287,7 @@ namespace Fingers
             Update(res);
             temps = (Bitmap)res.Clone();
             ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step3.bmp",ImageFormat.Bmp);
+            textBox2.Text = "完成直方图均衡化";
         }
 
         private void ButtonFour_Click(object sender, EventArgs e)//方向计算
@@ -309,6 +300,7 @@ namespace Fingers
             Bitmap res = Analysis.ImgDirection(temps, out DicData);
             Update(res);
             ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step4.bmp", ImageFormat.Bmp);
+            textBox2.Text = "完成脊线方向计算";
         }
 
         private void ButtonFive_Click(object sender, EventArgs e)//频率计算
@@ -321,6 +313,7 @@ namespace Fingers
             Bitmap res = Analysis.Frequency(temps, DicData, out FreData);
             Update(res);
             ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step5.bmp", ImageFormat.Bmp);
+            textBox2.Text = "完成频率计算";
         }
 
         private void ButtonSix_Click(object sender, EventArgs e)//掩码计算
@@ -333,6 +326,7 @@ namespace Fingers
             Bitmap res = Analysis.GetMask(temps, DicData, FreData, out MaskData);
             Update(res);
             ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step6.bmp", ImageFormat.Bmp);
+            textBox2.Text = "完成掩码计算";
         }
 
         private void ButtonSeven_Click(object sender, EventArgs e)//Gabor增强
@@ -345,6 +339,7 @@ namespace Fingers
             Bitmap res = Analysis.GaborEnhance(temps, DicData, FreData, MaskData, out GaborData);
             Update(res);
             ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step7.bmp", ImageFormat.Bmp);
+            textBox2.Text = "完成Gabor增强";
         }
 
         private void ButtonEight_Click(object sender, EventArgs e)//二值化
@@ -357,6 +352,7 @@ namespace Fingers
             Bitmap res = Analysis.BinaryImg(temps, out BinData);
             Update(res);
             ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step8.bmp", ImageFormat.Bmp);
+            textBox2.Text = "完成二值化";
         }
 
         private void ButtonNine_Click(object sender, EventArgs e)//细化
@@ -369,6 +365,7 @@ namespace Fingers
             Bitmap res = Analysis.Thinning(temps, BinData, out ThinnedData, 3);
             Update(res);
             ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step9.bmp", ImageFormat.Bmp);
+            textBox2.Text = "完成二值化";
         }
 
         private void ButtonTen_Click(object sender, EventArgs e)//特征提取
@@ -381,6 +378,7 @@ namespace Fingers
             Bitmap res = Analysis.Extract(temps, ThinnedData, out ExtractData, out Extrcount);
             Update(res);
             ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step10.bmp", ImageFormat.Bmp);
+            textBox2.Text = "完成特征提取";
         }
 
         private void ButtonEleven_Click(object sender, EventArgs e)//特征过滤
@@ -393,6 +391,7 @@ namespace Fingers
             Bitmap res = Analysis.MinuFilter(temps, ThinnedData, ExtractData, out Minutiaes, ref Extrcount);
             Update(res);
             ImageHelper.SaveBitmapToFile(res, "F:\\text.c\\c#\\Fingers\\bin\\cache\\step11.bmp", ImageFormat.Bmp);
+            textBox2.Text = "完成特征过滤";
         }
 
         private void ButtonTwelve_Click(object sender, EventArgs e)//特征入库
@@ -402,11 +401,13 @@ namespace Fingers
 
         private void ButtonThirteen_Click(object sender, EventArgs e)//特征匹配
         {
+            textBox2.Text = "匹配中";
             Comprose();
         }
 
         public void Comprose()
         {
+            const float SIMILAR_THRED = 0.1f;
             MINUTIAE[] minutiaes1;
             Bitmap res = SaveMinutiae(CurrentImage, out minutiaes1);//待匹配图片
             if (pictureBox1.Image != null)
@@ -432,10 +433,12 @@ namespace Fingers
                     if(Analysis.IsMatch(minutiaes1, minutiaes2))
                     {
                         MessageBox.Show($"识别成功:{username}");
+                        textBox2.Text = $"识别成功:{username}";
                         return;
                     }
                 }
                 MessageBox.Show("未匹配到正确结果");
+                textBox2.Text = "未匹配到正确结果";
             }
         }
 

@@ -64,6 +64,7 @@ namespace Fingers
         private const float MatchAngle = 0.5f;       // 弧度角度阈值
         private const int HashSize = 50;             // 空间哈希网格尺寸
 
+
         public Analysis()
         {
 
@@ -302,15 +303,16 @@ namespace Fingers
             {
                 for (int x = WindowR + 1; x < w - WindowR - 1; x++)//逐列，除了边缘
                 {
+                    // 这是用于遍历当前像素周围的窗口内的行
                     for (int j = 0; j < WindowR * 2 + 1; j++)
                     {
                         for (int i = 0; i < WindowR * 2 + 1; i++)
                         {
-                            int index1 = (y + j - WindowR) * w + x + i - WindowR;
-                            int index2 = (y + j - WindowR) * w + x + i - WindowR - 1;
-                            int index3 = (y + j - WindowR - 1) * w + x + i - WindowR;
-                            dx[i, j] = Intarr[index1] - Intarr[index2];
-                            dy[i, j] = Intarr[index1] - Intarr[index3];
+                            int index1 = (y + j - WindowR) * w + x + i - WindowR; // 对应当前像素在窗口中的位置
+                            int index2 = (y + j - WindowR) * w + x + i - WindowR - 1; // 当前像素的左邻像素
+                            int index3 = (y + j - WindowR - 1) * w + x + i - WindowR; // 当前像素的上邻像素
+                            dx[i, j] = Intarr[index1] - Intarr[index2]; // i,j处像素与其左侧像素的灰度差，水平梯度
+                            dy[i, j] = Intarr[index1] - Intarr[index3]; // i,j处像素与其上方像素的灰度差，垂直梯度
                         }
                     }
                     //计算当前像素脊线方向值
@@ -321,10 +323,9 @@ namespace Fingers
                         {
                             fx += (float)(2 * dx[i, j] * dy[i, j] * 1.0);
                             fy += (float)((dx[i, j] * dx[i, j] - dy[i, j] * dy[i, j]) * 1.0);
-
                         }
                     }
-                    fDirc[y * w + x] = (float)Math.Atan2(fx, fy);//此处转换可能存在精度问题
+                    fDirc[y * w + x] = (float)(0.5 * Math.Atan2(fx, fy));
                 }
             }
             return fDirc;
@@ -335,16 +336,18 @@ namespace Fingers
         /// </summary>
         public static float[] DircLowPass(float[] fDirc, int w, int h)
         {
-            int arrsize = w * h;
-            float[] fFitDirc = new float[arrsize];
-            const int fisize = 2;
-            int blocksize = 2 * fisize + 1;
-            float[] filter = new float[blocksize * blocksize];
-            float[] phix = new float[arrsize];
-            float[] phiy = new float[arrsize];
-            float[] phi2x = new float[arrsize];
-            float[] phi2y = new float[arrsize];
+            int arrsize = w * h; // 图像总像素数
+            float[] fFitDirc = new float[arrsize]; // 滤波后数据
+            const int fisize = 2; // 滤波器半径
+            int blocksize = 2 * fisize + 1; // 滤波器大小
+            float[] filter = new float[blocksize * blocksize]; // 滤波器模板
+            float[] phix = new float[arrsize]; // 存储每个像素点的方向的余弦值
+            float[] phiy = new float[arrsize]; // 存储每个像素点的方向的正弦值
+            float[] phi2x = new float[arrsize]; // 存储滤波后的方向的余弦值
+            float[] phi2y = new float[arrsize]; // 存储滤波后的方向的正弦值
             float sum = 0.0f;
+            // 设置滤波器的权重
+            // 权重由像素与中心点的曼哈顿距离决定
             for (int y = 0; y < blocksize; y++)
             {
                 for (int x = 0; x < blocksize; x++)
@@ -353,6 +356,7 @@ namespace Fingers
                     sum += filter[y * blocksize + x];
                 }
             }
+            // 归一化处理，确保权重之和为1
             for (int y = 0; y < blocksize; y++)
             {
                 for (int x = 0; x < blocksize; x++)
@@ -372,20 +376,24 @@ namespace Fingers
             //对所有像素进行低通滤波
             float nx, ny;
             int val;
+            //遍历每一个像素
             for (int y = 0; y < h - blocksize; y++)
             {
                 for (int x = 0; x < w - blocksize; x++)
                 {
                     nx = 0.0f; ny = 0.0f;
+                    //遍历滤波器
                     for (int j = 0; j < blocksize; j++)
                     {
                         for (int i = 0; i < blocksize; i++)
                         {
-                            val = (x + i) + (j + y) * w;
+                            val = (x + i) + (j + y) * w; // 计算当前滤波器位置
+                            // 将滤波器的权重分别与当前像素点的方向余弦值和正弦值相乘，并累加到 nx 和 ny 中。实现了加权平均的效果
                             nx += filter[j * blocksize + i] * phix[val];
                             ny += filter[j * blocksize + i] * phiy[val];
                         }
                     }
+                    //数据存储
                     val = x + y * w;
                     phi2x[val] = nx;
                     phi2y[val] = ny;
@@ -1303,7 +1311,7 @@ namespace Fingers
                 if (matches >= MaxFeatures / 2) return true;
             }
 
-            return matches >= MaxFeatures / 3;
+            return matches >= MaxFeatures / 4;
         }
 
         #region 核心优化方法
